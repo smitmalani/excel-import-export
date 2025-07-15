@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome to {{ platformName }}!</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      margin: 0;
+      padding: 0;
+      background-color: #f4f4f4;
+    }
+    .container {
+      max-width: 600px;
+      margin: 20px auto;
+      padding: 20px;
+      background-color: #fff;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+    .header {
+      text-align: center;
+      padding-bottom: 20px;
+      border-bottom: 1px solid #eee;
+    }
+    .header h1 {
+      margin: 0;
+      color: #0056b3;
+    }
+    .content {
+      padding: 20px 0;
+    }
+    .content p {
+      margin-bottom: 15px;
+    }
+    .credentials {
+      background-color: #f9f9f9;
+      padding: 15px;
+      border: 1px dashed #ddd;
+      border-radius: 4px;
+      margin-top: 10px;
+    }
+    .credentials strong {
+      display: inline-block;
+      width: 100px;
+    }
+    .footer {
+      text-align: center;
+      padding-top: 20px;
+      border-top: 1px solid #eee;
+      font-size: 0.9em;
+      color: #777;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Welcome Aboard, {{ businessName }}!</h1>
+    </div>
+    <div class="content">
+      <p>Hello {{ adminFullName }},</p>
+      <p>Congratulations! Your business, <strong>{{ businessName }}</strong>, has been successfully registered on the {{ platformName }} platform.</p>
+      <p>You can now log in to your Business Admin portal to manage your loyalty program, members, and services. Here are your initial login credentials:</p>
+      <div class="credentials">
+        <p><strong>Email:</strong> {{ email }}</p>
+        <p><strong>Password:</strong> {{ password }}</p>
+      </div>
+      <p>We strongly recommend that you change this password upon your first login.</p>
+      <p>To get started, please visit our login page: <a href="{{ loginUrl }}">{{ loginUrl }}</a></p>
+      <p>If you have any questions or need assistance, please don't hesitate to contact our support team.</p>
+      <p>Best regards,<br>The {{ platformName }} Team</p>
+    </div>
+    <div class="footer">
+      <p>&copy; {{ currentYear }} {{ platformName }}. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html> 

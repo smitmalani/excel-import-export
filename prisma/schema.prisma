@@ -1,0 +1,233 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+  binaryTargets = ["native", "windows"] 
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Business {
+  BusinessID   Int      @id @default(autoincrement())
+  BusinessName String   @db.VarChar(255)
+  Address      String?  @db.Text
+  LogoURL      String?  @db.VarChar(255)
+  PhoneNumber  String?  @db.VarChar(20)
+  IsActive     Boolean  @default(true)
+  CreatedAt    DateTime @default(now()) @db.Timestamp(0)
+  UpdatedAt    DateTime @default(now()) @updatedAt @db.Timestamp(0)
+
+  Users             User[]
+  CardTypes         CardType[]
+  Members           Member[]
+  ServiceOfferings  ServiceOffering[]
+  Departments       Department[]
+  LoyaltyRules      LoyaltyRule[]
+  PointTransactions PointTransaction[]
+  AuditLogs         AuditLog[]
+
+  @@map("Businesses")
+}
+
+enum Role {
+  SuperAdmin
+  BusinessAdmin
+  BusinessSubAdmin
+}
+
+model User {
+  UserID       Int      @id @default(autoincrement())
+  BusinessID   Int?     // Null for SuperAdmins
+  Role         Role
+  Username     String   @unique @db.VarChar(100)
+  PasswordHash String   @db.VarChar(255)
+  FullName     String?  @db.VarChar(150)
+  Email        String   @db.VarChar(255)
+  IsActive     Boolean  @default(true)
+  LastLogin    DateTime? @db.Timestamp(0)
+  PasswordResetToken          String?   @unique @db.VarChar(255) // Make it unique if you want to ensure only one active token per user
+  PasswordResetTokenExpiresAt DateTime? @db.Timestamp(0)
+  CreatedAt    DateTime @default(now()) @db.Timestamp(0)
+  UpdatedAt    DateTime @default(now()) @updatedAt @db.Timestamp(0)
+
+  Business          Business?          @relation(fields: [BusinessID], references: [BusinessID], onDelete: SetNull) // Or Cascade if a business deletion removes its users
+  MembersRegistered Member[]           @relation("RegisteredByUser")
+  PointTransactions PointTransaction[] @relation("ProcessedByUser")
+  AuditLogs         AuditLog[]
+
+  @@unique([Email, BusinessID]) // Email unique per business, SuperAdmin email globally unique (BusinessID IS NULL) - Prisma requires handling this logic at application level or via custom constraints if BusinessID is part of the key and can be null. For simplicity, we'll rely on application logic for the global uniqueness of SuperAdmin email for now.
+  @@map("Users")
+}
+
+model CardType {
+  CardTypeID  Int     @id @default(autoincrement())
+  BusinessID  Int
+  CardName    String  @db.VarChar(100)
+  Description String? @db.Text
+
+  Business          Business          @relation(fields: [BusinessID], references: [BusinessID], onDelete: Cascade)
+  Members           Member[] // Members holding this card type
+  ServiceOfferings  ServiceOffering[] // Service offerings requiring this card type
+
+  @@unique([BusinessID, CardName])
+  @@map("CardTypes")
+}
+
+enum MemberSystemType { // Renamed from MemberType in SQL to avoid confusion with Prisma type
+  Patient
+  Consultant
+  Regular
+  VIP
+  Standard
+}
+
+enum Gender {
+  Male
+  Female
+  Other
+}
+
+model Member {
+  MemberID             Int               @id @default(autoincrement())
+  BusinessID           Int
+  MemberType           MemberSystemType // Using the renamed ENUM
+  FirstName            String            @db.VarChar(100)
+  LastName             String?           @db.VarChar(100)
+  MobileNumber         String            @db.VarChar(20)
+  Email                String?           @db.VarChar(255)
+  Gender               Gender?
+  Address              String?           @db.Text
+  Age                  Int?
+  ProfileImageURL      String?           @db.VarChar(255)
+  SmartCardNumber      String?           @db.VarChar(50)
+  CardTypeID           Int? // This refers to the CardType the member HOLDS.
+  CurrentLoyaltyPoints Decimal           @default(0.00) @db.Decimal(12, 2)
+  LoyaltyCardURL       String?           @db.VarChar(255)
+  IsActive             Boolean           @default(true)
+  RegisteredByUserID   Int? // User (Sub-Admin/Admin) who registered this member
+  CreatedAt            DateTime          @default(now()) @db.Timestamp(0)
+  UpdatedAt            DateTime          @default(now()) @updatedAt @db.Timestamp(0)
+
+  Business           Business           @relation(fields: [BusinessID], references: [BusinessID], onDelete: Cascade)
+  HeldCardType       CardType?          @relation(fields: [CardTypeID], references: [CardTypeID], onDelete: SetNull)
+  RegisteredByUser   User?              @relation("RegisteredByUser", fields: [RegisteredByUserID], references: [UserID], onDelete: SetNull)
+  PointTransactions  PointTransaction[]
+
+  @@unique([BusinessID, MobileNumber])
+  @@unique([BusinessID, SmartCardNumber]) // Assuming SmartCardNumber is unique within a business if not null
+  @@map("Members")
+}
+
+model ServiceOffering {
+  ServiceOfferingID Int     @id @default(autoincrement())
+  BusinessID        Int
+  ServiceName       String  @db.VarChar(255)
+  CardTypeID        Int     // FK to CardTypes table, indicating the CardType this offering is for
+  Description       String? @db.Text
+  IsActive          Boolean @default(true)
+
+  Business          Business           @relation(fields: [BusinessID], references: [BusinessID], onDelete: Cascade)
+  RequiredCardType  CardType           @relation(fields: [CardTypeID], references: [CardTypeID], onDelete: Cascade)
+  LoyaltyRules      LoyaltyRule[]
+  PointTransactions PointTransaction[]
+
+  @@unique([BusinessID, ServiceName, CardTypeID]) // A service name combined with a card type is unique for a business
+  @@map("ServiceOfferings")
+}
+
+model Department {
+  DepartmentID   Int     @id @default(autoincrement())
+  BusinessID     Int
+  DepartmentName String  @db.VarChar(100)
+  Description    String? @db.Text
+  IsActive       Boolean @default(true)
+
+  Business Business @relation(fields: [BusinessID], references: [BusinessID], onDelete: Cascade)
+
+  @@unique([BusinessID, DepartmentName])
+  @@map("Departments")
+}
+
+enum LoyaltyRuleType {
+  Earn
+  Redeem
+}
+
+model LoyaltyRule {
+  RuleID                Int              @id @default(autoincrement())
+  BusinessID            Int              // For easier querying and data segregation confirmation
+  ServiceOfferingID     Int              // FK to ServiceOfferings table
+  RuleType              LoyaltyRuleType
+  EarnPointPercentage   Decimal?         @db.Decimal(5, 2)
+  PointsPerUnitCurrency Decimal?         @db.Decimal(10, 2) // e.g., 10 points = 1 unit of currency
+  Description           String?          @db.Text
+  IsActive              Boolean          @default(true)
+  CreatedAt             DateTime         @default(now()) @db.Timestamp(0)
+  UpdatedAt             DateTime         @default(now()) @updatedAt @db.Timestamp(0)
+
+  Business        Business         @relation(fields: [BusinessID], references: [BusinessID], onDelete: Cascade)
+  ServiceOffering ServiceOffering  @relation(fields: [ServiceOfferingID], references: [ServiceOfferingID], onDelete: Cascade)
+  PointTransactions PointTransaction[]
+
+  @@unique([ServiceOfferingID, RuleType]) // A service offering can have one earn rule and one redeem rule
+  @@map("LoyaltyRules")
+}
+
+enum PointTransactionType {
+  Earn
+  Redeem
+  ManualAdjust
+  Expiry
+}
+
+model PointTransaction {
+  TransactionID     Int                  @id @default(autoincrement())
+  BusinessID        Int                  // For data segregation and querying
+  MemberID          Int
+  TransactionType   PointTransactionType
+  Points            Decimal              @db.Decimal(12, 2) // Positive for Earn, Negative for Redeem/Expiry
+  TransactionAmount Decimal?             @db.Decimal(12, 2) // Original bill amount
+  RedeemedValue     Decimal?             @db.Decimal(12, 2) // Value obtained through redemption
+  ServiceOfferingID Int?                 // ServiceOffering availed, if applicable
+  RuleID            Int?                 // LoyaltyRule applied, if applicable
+  BillNumber        String?              @db.VarChar(100)
+  Title             String?              @db.VarChar(255)
+  Description       String?              @db.Text
+  ProcessedByUserID Int?                 // User (Sub-Admin/Admin) who processed this
+  TransactionDate   DateTime             @default(now()) @db.Timestamp(0)
+
+  Business        Business         @relation(fields: [BusinessID], references: [BusinessID], onDelete: Cascade)
+  Member          Member           @relation(fields: [MemberID], references: [MemberID], onDelete: Cascade) // Member must exist
+  ServiceOffering ServiceOffering? @relation(fields: [ServiceOfferingID], references: [ServiceOfferingID], onDelete: SetNull)
+  LoyaltyRule     LoyaltyRule?     @relation(fields: [RuleID], references: [RuleID], onDelete: SetNull)
+  ProcessedByUser User?            @relation("ProcessedByUser", fields: [ProcessedByUserID], references: [UserID], onDelete: SetNull)
+
+  @@map("PointTransactions")
+}
+
+model AuditLog {
+  LogID            Int      @id @default(autoincrement())
+  BusinessID       Int?     // Link to business if action is business-specific
+  UserID           Int?     // User performing the action
+  ActionType       String   @db.VarChar(100)
+  TargetEntityType String?  @db.VarChar(50) // e.g., 'Business', 'Member', 'User', 'LoyaltyRule'
+  TargetEntityID   Int?     // ID of the affected entity
+  OldValue         String?  @db.Text
+  NewValue         String?  @db.Text
+  Details          String?  @db.Text
+  Timestamp        DateTime @default(now()) @db.Timestamp(0)
+  IPAddress        String?  @db.VarChar(45)
+
+  Business Business? @relation(fields: [BusinessID], references: [BusinessID], onDelete: SetNull)
+  User     User?     @relation(fields: [UserID], references: [UserID], onDelete: SetNull)
+
+  @@map("AuditLog")
+}
